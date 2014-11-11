@@ -63,7 +63,7 @@ double calcOobError(score_t *oobPredsAcc,uint *oobPredsC,uint *Y,uint N,uint num
  if(!multi){
   //Report 1-acc
   for(uint e=0;e<N;e++){
-   score_t max=-INFINITY; uint whichMax;
+   score_t max=-INFINITY; uint whichMax=UINT_MAX;
    for(uint ee=0;ee<numC;ee++)
     if(oobPredsAcc[ee+numC*e]>max){
      max=oobPredsAcc[ee+numC*e];
@@ -206,12 +206,14 @@ model *makeModel(DATASET_,ferns *ferns,params *P,R_){
  FREE(buf_idxC);
  return(ans);
 
- allocFailed:
- killModel(ans);
- IFFREE(curPreds); IFFREE(bag); IFFREE(sumD);
- IFFREE(sumDD); IFFREE(useCount); IFFREE(idx);
- IFFREE(buf_idxC);
- return(NULL);
+ #ifndef IN_R
+  allocFailed:
+  killModel(ans);
+  IFFREE(curPreds); IFFREE(bag); IFFREE(sumD);
+  IFFREE(sumDD); IFFREE(useCount); IFFREE(idx);
+  IFFREE(buf_idxC);
+  return(NULL);
+ #endif
 }
 
 void predictWithModelSimple(PREDSET_,ferns *x,uint *ans,SIMPP_,double *sans,R_){
@@ -228,8 +230,14 @@ void predictWithModelSimple(PREDSET_,ferns *x,uint *ans,SIMPP_,double *sans,R_){
    idx,
    _SIMP);
  }
- for(uint e=0;e<N;e++)
-  ans[e]=whichMaxTieAware(&(sans[e*numC]),numC,_R);
+ if(!multi){
+  for(uint e=0;e<N;e++)
+   ans[e]=whichMaxTieAware(&(sans[e*numC]),numC,_R);
+ }else{
+  for(uint e=0;e<numC;e++)
+   for(uint ee=0;ee<N;ee++)
+    ans[e*N+ee]=sans[ee*numC+e]>0.;
+ }
 }
 
 

@@ -1,10 +1,11 @@
-498a955536acf0fe94474d1d481945c5 *DESCRIPTION
+28706d685eb3dbdaff887dad2d75df56 *DESCRIPTION
 bdc939339aaa30136f381b7f3f9e3617 *NAMESPACE
 af32ffcadb650d614acb8527b2d375df *R/ferns.R
-9fa34933ffecac6d2759fd4563b9fb95 *inst/NEWS
-b1fdac6177e9dd06395ded266fd439cc *man/rFerns.Rd
+567db38f89b700f395dd4d47b436b838 *inst/CITATION
+5736b84ea579f14dd974aba3401d5ab8 *inst/NEWS
+728839f55b96fd383ac7a54349142c73 *man/rFerns.Rd
 ca12a91f6e474e779e0cd54b53fea84c *man/rFerns.predict.Rd
 4f2983c153fe486d9126ce75aa419b42 *src/fern.h
-2fa3e5e8cd57776d5bd7e0d437e6b21d *src/ferns.c
-a3f08036d54fbb728f5fe14ae1c31d5e *src/forest.h
-212a93dec65cd31486817e001fbffe1b *src/tools.h
+9c5a00d3958b8bef51b295a670ab1b28 *src/ferns.c
+73d408f6a7b44302cf5b2ea25357ab12 *src/forest.h
+f41d134625f99fc541f6a10a81cf0bcf *src/tools.h
