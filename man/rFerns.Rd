@@ -54,7 +54,7 @@ Must be either a 2-element integer vector or \code{NULL}, which corresponds to s
 It should be set to the same value in two merged models to make shadow importance meaningful.}
 }
 \value{
-An object of class \code{rFerns}, which is a list with the  following components:
+An object of class \code{rFerns}, which is a list with the following components:
 \item{model}{The built model; \code{NULL} if \code{saveForest} was \code{FALSE}.}
 \item{oobErr}{OOB approximation of accuracy.
 Ignores never-OOB-tested objects (see oobScores element).}
