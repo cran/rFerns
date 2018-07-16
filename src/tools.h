@@ -1,8 +1,8 @@
 /*   Shared C code
 
-  Copyright 2011-2016 Miron B. Kursa
+     Copyright 2011-2018 Miron B. Kursa
 
-  This file is part of rFerns R package.
+     This file is part of rFerns R package.
 
  rFerns is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  rFerns is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
@@ -12,6 +12,13 @@
 #include <stdint.h>
 #include <limits.h>
 #include <assert.h>
+
+#ifdef _OPENMP
+ #include <omp.h>
+#else
+ #define omp_get_thread_num() 0
+ #define omp_get_max_threads() 1
+#endif
 
 typedef uint32_t uint;
 typedef uint32_t mask;
@@ -26,12 +33,11 @@ struct parameters{
  uint D;
  uint twoToD;
  uint numFerns;
- uint repOobErrEvery;
- uint holdOobErr;
  uint calcImp;
  uint holdForest;
  uint multilabel;
  uint consSeed;
+ uint threads;
 };
 typedef struct parameters params;
 #define PARAMS_ params *P
@@ -81,7 +87,6 @@ typedef struct attribute att;
 
 struct model{
  ferns *forest;
- double *oobErr;
  score_t *oobPreds;
  uint *oobOutOfBagC;
  double *imp;
@@ -115,6 +120,7 @@ uint32_t __rintegerf(rng_t *rng){
 #define RINDEX(upTo) ((uint32_t)(RUNIF_OPEN*((double)upTo)))
 //Setting seed; give it two uint32s you like
 #define SETSEED(a,b) rng->z=(a); rng->w=(b)
+#define SETSEEDEX(r,a,b) (r)->z=(a); (r)->w=(b);
 #define LOADSEED(x) ((uint64_t*)rng)[0]=(x)
 #define DUMPSEED ((uint64_t*)rng)[0]
 #define RMASK(numCat) 1+RINDEX((1<<(numCat))-2)
@@ -153,7 +159,14 @@ uint whichMax(double *where,uint N){
  return ans;
 }
 
-uint whichMaxTieAware(score_t *where,uint N,R_){
+//The algorithm used to use random values; now, it just
+//jumps one class further per object, so equal scores will lead to predictions as shown:
+// 0 0 0 0 -> a
+// 0 0 0 0 -> b
+// 0 0 0 0 -> c
+// 0 0 0 0 -> d
+// 0 0 0 0 -> a etc.
+uint whichMaxTieAware(score_t *where,uint N,uint jmp){
  score_t curMax=-INFINITY;
  uint b[N];
  uint be=UINT_MAX;
@@ -167,7 +180,7 @@ uint whichMaxTieAware(score_t *where,uint N,R_){
    b[be]=e;
   }
  if(!be) return(b[0]);
- return(b[RINDEX(be+1)]);
+ return(b[jmp%(be+1)]);
 }
 
 //Memory stuff

@@ -1,6 +1,6 @@
-/*   R frontend to C code
+/*   R front-end to C code
 
-     Copyright 2011-2016 Miron B. Kursa
+     Copyright 2011-2018 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -14,7 +14,7 @@
 #include <Rinternals.h>
 #include <R_ext/Utils.h>
 #include <R_ext/Rdynload.h>
-#include <R_ext/Visibility.h> 
+#include <R_ext/Visibility.h>
 
 #define PRINT Rprintf
 #define IN_R 7
@@ -47,7 +47,7 @@ void loadAttributes(SEXP sAttributes,struct attribute **X,uint *nAtt,uint *nObj)
 
 }
 
-SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sCalcImp,SEXP sOobErrEvery,SEXP sHoldForest,SEXP sMultilabel,SEXP sConsSeed){
+SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sCalcImp,SEXP sHoldForest,SEXP sMultilabel,SEXP sConsSeed,SEXP sThreads){
  struct attribute *X;
  uint nAtt,nObj,nClass,*Y;
  uint multi=INTEGER(sMultilabel)[0];
@@ -67,25 +67,33 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
  //Now, let's make the RNG and seed from R's RNG
  EMERGE_R_FROM_R;
 
+ //Parse Threads and consult with OMP
+ if(isInteger(sThreads) && length(sThreads)!=1) error("Invalid threads argument");
+ int nt=INTEGER(sThreads)[0];
+ if(nt<0) error("Invalid threads argument");
+ int mt=omp_get_max_threads();
+ if(nt==0) nt=mt;
+ if(nt>mt) warning("Thread count capped to %d",mt);
+ nt=nt>mt?mt:nt;
+
  //Data loaded, time to load parameters
  params Q;
  Q.numClasses=nClass;
  Q.D=INTEGER(sD)[0];
  Q.twoToD=1<<(Q.D);
  Q.numFerns=INTEGER(sNumFerns)[0];
- Q.repOobErrEvery=abs(INTEGER(sOobErrEvery)[0]);
- Q.holdOobErr=INTEGER(sOobErrEvery)[0]>0;
  Q.calcImp=INTEGER(sCalcImp)[0]; //0->none, 1->msl, 2->msl+sha
  Q.holdForest=INTEGER(sHoldForest)[0];
  Q.multilabel=multi;
+ Q.threads=nt;
  if(Q.calcImp==2){
-  Q.consSeed=((uint64_t*)INTEGER(sConsSeed))[0];
+  Q.consSeed=((uint32_t*)INTEGER(sConsSeed))[0];
  }else{
   Q.consSeed=0;
  }
 
  //Start composing answer
- SEXP sAns; PROTECT(sAns=allocVector(VECSXP,5));
+ SEXP sAns; PROTECT(sAns=allocVector(VECSXP,4));
 
  //Allocating fern forest; the whole space is controlled by R
  ferns ferns;
@@ -101,9 +109,9 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
   ferns.scores=(score_t*)REAL(sfScores);
  }else{
   //In the opposite case, we allocate a chunk for 1-fern forest on GC heap
-  ferns.splitAtts=(int*)R_alloc(Q.D,sizeof(int));
-  ferns.thresholds=(thresh*)R_alloc(Q.D,sizeof(thresh));
-  ferns.scores=(double*)R_alloc((Q.numClasses)*(Q.twoToD),sizeof(double));
+  ferns.splitAtts=(int*)R_alloc(Q.D*nt,sizeof(int));
+  ferns.thresholds=(thresh*)R_alloc(Q.D*nt,sizeof(thresh));
+  ferns.scores=(double*)R_alloc((Q.numClasses)*(Q.twoToD)*nt,sizeof(score_t));
  }
 
  //Fire the code
@@ -163,39 +171,26 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
   //Left: sAns
 
   if(!multi){
-   //Do actual voting on this matrix; push NA for never-oobs and
-   //random-of-max for ties.
+   //Do actual voting on this matrix; push NA for never-in-OOBs and
+   //pseudo-random-of-max for ties.
    SEXP sOobPreds; PROTECT(sOobPreds=allocVector(INTSXP,nObj));
    sint *winningClass=INTEGER(sOobPreds);
 
    for(uint e=0;e<nObj;e++)
     if(M->oobOutOfBagC[e]){
-     winningClass[e]=whichMaxTieAware(&(M->oobPreds[e*Q.numClasses]),Q.numClasses,_R);
+     winningClass[e]=whichMaxTieAware(&(M->oobPreds[e*Q.numClasses]),Q.numClasses,e);
     } else winningClass[e]=NA_INTEGER;
 
-   SET_VECTOR_ELT(sAns,4,sOobPreds);
+   SET_VECTOR_ELT(sAns,3,sOobPreds);
    UNPROTECT(1);
    //UPs: sOobPreds
    //Left: sAns
   }else{
-   SET_VECTOR_ELT(sAns,4,R_NilValue);
+   SET_VECTOR_ELT(sAns,3,R_NilValue);
   }
  }else{
   SET_VECTOR_ELT(sAns,1,R_NilValue);
-  SET_VECTOR_ELT(sAns,4,R_NilValue);
- }
-
- if(M->oobErr){
-  SEXP sOobErr; PROTECT(sOobErr=allocVector(REALSXP,(Q.numFerns)));
-  double *tmp=REAL(sOobErr);
-  for(uint e=0;e<(Q.numFerns);e++)
-   tmp[e]=M->oobErr[e];
-  SET_VECTOR_ELT(sAns,2,sOobErr);
-  UNPROTECT(1);
-  //UPs: sOobErr
-  //Left: sAns
- }else{
-  SET_VECTOR_ELT(sAns,2,R_NilValue);
+  SET_VECTOR_ELT(sAns,3,R_NilValue);
  }
 
  if(M->imp){
@@ -217,22 +212,21 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
    for(uint e=0;e<nAtt;e++)
     tmp[e+nAtt*2]=M->try[e];
   }
-  SET_VECTOR_ELT(sAns,3,sImp);
+  SET_VECTOR_ELT(sAns,2,sImp);
   UNPROTECT(1);
   //UPs: sImp, one or another
   //Left: sAns
  }else{
-  SET_VECTOR_ELT(sAns,3,R_NilValue);
+  SET_VECTOR_ELT(sAns,2,R_NilValue);
  }
 
  //Set names
  SEXP sAnsNames;
- PROTECT(sAnsNames=NEW_CHARACTER(5));
+ PROTECT(sAnsNames=NEW_CHARACTER(4));
  SET_STRING_ELT(sAnsNames,0,mkChar("model"));
  SET_STRING_ELT(sAnsNames,1,mkChar("oobScores"));
- SET_STRING_ELT(sAnsNames,2,mkChar("oobErr"));
- SET_STRING_ELT(sAnsNames,3,mkChar("importance"));
- SET_STRING_ELT(sAnsNames,4,mkChar("oobPreds"));
+ SET_STRING_ELT(sAnsNames,2,mkChar("importance"));
+ SET_STRING_ELT(sAnsNames,3,mkChar("oobPreds"));
  setAttrib(sAns,R_NamesSymbol,sAnsNames);
  UNPROTECT(2);
  //UPs: sAnsNames, sAns
@@ -299,4 +293,4 @@ void attribute_visible R_init_rFerns(DllInfo *dll){
  R_useDynamicSymbols(dll,FALSE);
  R_forceSymbols(dll,TRUE);
 }
-  
+

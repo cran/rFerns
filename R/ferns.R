@@ -1,6 +1,6 @@
 #    R part of rFerns
 #
-#    Copyright 2011-2016 Miron B. Kursa
+#    Copyright 2011-2018 Miron B. Kursa
 #
 #    This file is part of rFerns R package.
 #
@@ -56,12 +56,10 @@ rFerns.matrix<-function(x,y,...){
 #' \code{"none"} turns importance calculation off, for a slightly faster execution.
 #' For compatibility with pre-1.2 rFerns, \code{TRUE} will resolve to \code{"simple"} and \code{FALSE} to \code{"none"}.
 #' Abbreviation can be used instead of a full value.
-#' @param reportErrorEvery If set to a number larger than 0, current OOB error approximation will be printed every time a chunk of \code{reportErrorEvery} ferns is finished.
-#' @param saveErrorPropagation Should the OOB error approximation be calculated after each ferns was created and saved?
-#' Setting to \code{FALSE} may improve performance.
 #' @param saveForest Should the model be saved? It must be \code{TRUE} if you want to use the model for prediction; however, if you are interested in importance or OOB error only, setting it to \code{FALSE} significantly improves memory requirements, especially for large \code{depth} and \code{ferns}.
 #' @param consistentSeed PRNG seed used for shadow importance \emph{only}.
 #' Must be either a 2-element integer vector or \code{NULL}, which corresponds to seeding from the default PRNG.
+#' @param threads Number or OpenMP threads to use. The default value of \code{0} means all available to OpenMP.
 #' It should be set to the same value in two merged models to make shadow importance meaningful.
 #' @param ... For formula and matrix methods, a place to state parameters to be passed to default method.
 #' For the print method, arguments to be passed to \code{print}.
@@ -94,9 +92,8 @@ rFerns.matrix<-function(x,y,...){
 #' @references Ozuysal M, Calonder M, Lepetit V & Fua P. (2009). \emph{Fast Keypoint Recognition using Random Ferns}, IEEE Transactions on Pattern Analysis and Machine Intelligence, 32(3), 448-461.
 #'
 #' Kursa MB (2014). \emph{rFerns: An Implementation of the Random Ferns Method for General-Purpose Machine Learning}, Journal of Statistical Software, 61(10), 1-13.
-#' @author Miron B. Kursa
 #' @examples
-#' set.seed(77);
+#' set.seed(77)
 #' #Fetch Iris data
 #' data(iris)
 #' #Build model
@@ -107,22 +104,22 @@ rFerns.matrix<-function(x,y,...){
 #' @export
 #' @useDynLib rFerns, .registration=TRUE
 
-rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEvery=0,saveErrorPropagation=FALSE,saveForest=TRUE,consistentSeed=NULL,...){
+rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",saveForest=TRUE,consistentSeed=NULL,threads=0,...){
  #Stop on bad input
- depth<-as.integer(depth);
- ferns<-as.integer(ferns);
+ depth<-as.integer(depth)
+ ferns<-as.integer(ferns)
  stopifnot(length(depth)==1 && depth>0 && depth<=16)
  stopifnot(length(ferns)==1 && ferns>0)
  stopifnot(!any(is.na(y)))
  if(!is.data.frame(x)) stop("x must be a data frame.")
  if(is.na(names(x)) || any(duplicated(names(x)))) stop("Attribute names must be unique.")
  if(is.factor(y) && is.null(dim(y))){
-  multi<-FALSE;
+  multi<-FALSE
   if(length(y)!=nrow(x)) stop("Attributes' and decision's sizes must match.")
  }else{
-  y<-as.matrix(y);
+  y<-as.matrix(y)
   if(is.logical(y) && length(dim(y))==2){
-   multi<-TRUE;
+   multi<-TRUE
    if(nrow(y)!=nrow(x)) stop("Attributes' and decision's sizes must match.")
   }else{
    stop("y must be a factor vector or a logical matrix.")
@@ -136,40 +133,37 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
    paste(names(x)[bad],collapse=", ")))
  }
  #Backward compatibility
- if(length(importance)!=1) stop("Wrong importance value.");
- if(identical(importance,FALSE)) importance<-"none";
- if(identical(importance,TRUE)) importance<-"simple";
- importance<-pmatch(importance,c("none","simple","shadow"));
- if(is.na(importance)) stop("Wrong importance value.");
+ if(length(importance)!=1) stop("Wrong importance value.")
+ if(identical(importance,FALSE)) importance<-"none"
+ if(identical(importance,TRUE)) importance<-"simple"
+ importance<-pmatch(importance,c("none","simple","shadow"))
+ if(is.na(importance)) stop("Wrong importance value.")
 
  #Consistent seed setup
  if(importance==3){
   if(is.null(consistentSeed)){
-   consistentSeed<-as.integer(sample(2^32-1,2,replace=TRUE)-2^31);
+   consistentSeed<-as.integer(sample(2^32-1,2,replace=TRUE)-2^31)
   }
-  stopifnot(is.integer(consistentSeed));
-  stopifnot(length(consistentSeed)==2);
+  stopifnot(is.integer(consistentSeed))
+  stopifnot(length(consistentSeed)==2)
  }else{
   if(!is.null(consistentSeed)){
-   warning("Consistent seed is only useful with shadow importance; dropping.");
-   consistentSeed<-NULL;
+   warning("Consistent seed is only useful with shadow importance; dropping.")
+   consistentSeed<-NULL
   }
  }
 
  if(multi && (importance>1)) stop("Importance is not yet supported for multi-label ferns.")
-
- if(reportErrorEvery<1 || reportErrorEvery>ferns) reportErrorEvery<-ferns+1
- saveOobErr<-ifelse(saveErrorPropagation,1,-1)*reportErrorEvery
 
  Sys.time()->before
  .Call(random_ferns,x,y,
   as.integer(depth[1]),
   as.integer(ferns[1]),
   as.integer(importance-1), #0->none, 1->msl, 2->msl+sha
-  as.integer(saveOobErr),
   as.integer(saveForest),
   as.integer(multi),
-  as.integer(consistentSeed))->ans
+  as.integer(consistentSeed),
+  as.integer(threads))->ans
  after<-Sys.time()
 
  #Adjust C output with proper factor levels
@@ -179,8 +173,8 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
       labels=levels(y))
  }else{
   if(multi){
-   ans$oobPreds<-t(ans$oobScores>0);
-   colnames(ans$oobPreds)<-colnames(y);
+   ans$oobPreds<-t(ans$oobScores>0)
+   colnames(ans$oobPreds)<-colnames(y)
   }
  }
 
@@ -200,15 +194,15 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
   table(Predicted=ans$oobPreds,True=y)->ans$oobConfusionMatrix
   if(is.null(ans$oobErr))
    ans$oobErr<-mean(ans$oobPreds!=y,na.rm=TRUE)
-  ans$parameters<-c(classes=length(levels(y)),depth=depth,ferns=ferns);
-  ans$type<-"class-many";
+  ans$parameters<-c(classes=length(levels(y)),depth=depth,ferns=ferns)
+  ans$type<-"class-many"
  }else{
   NULL->ans$oobConfusionMatrix
   if(is.null(ans$oobErr))
    ans$oobErr<-mean(rowSums(y!=ans$oobPreds))
-  ans$oobPerClassError<-colMeans(ans$oobPreds!=y);
-  ans$parameters<-c(classes=ncol(y),depth=depth,ferns=ferns);
-  ans$type<-"class-multi";
+  ans$oobPerClassError<-colMeans(ans$oobPreds!=y)
+  ans$parameters<-c(classes=ncol(y),depth=depth,ferns=ferns)
+  ans$type<-"class-multi"
  }
 
  if(!is.null(ans$importance)){
@@ -219,7 +213,7 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
   if(importance==3){
    ans$importance<-data.frame(matrix(ans$importance,ncol=3))
    names(ans$importance)<-c("MeanScoreLoss","Shadow","Tries")
-   ans$consistentSeed<-consistentSeed;
+   ans$consistentSeed<-consistentSeed
   }
   if(!is.null(names(x)))
    rownames(ans$importance)<-names(x)
@@ -229,7 +223,7 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
  ans$timeTaken<-after-before
 
  class(ans)<-"rFerns"
- return(ans);
+ return(ans)
 }
 
 #' Prediction with random ferns model
@@ -243,7 +237,6 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",reportErrorEve
 #' @param ... Additional parameters.
 #' @return Predictions.
 #' If \code{scores} is \code{TRUE}, a factor vector (for many-class classification) or a logical data.frame (for multi-class classification) with predictions, else a data.frame with class' scores.
-#' @author Miron B. Kursa
 #' @examples
 #' set.seed(77)
 #' #Fetch Iris data
@@ -271,7 +264,7 @@ predict.rFerns<-function(object,x,scores=FALSE,...){
  if(!("rFerns"%in%class(object))) stop("object must be of a rFerns class")
  if(is.null(object$model)&(!missing(x)))
   stop("This fern forest object does not contain the model.")
- scores<-as.logical(scores)[1];
+ scores<-as.logical(scores)[1]
  if(is.na(scores)) stop("Wrong value of scores; should be TRUE or FALSE.")
 
  iss<-object$isStruct
@@ -284,19 +277,19 @@ predict.rFerns<-function(object,x,scores=FALSE,...){
  }
  iss$predictorLevels->pL
  pN<-names(pL)
- multi<-identical(object$type,"class-multi");
+ multi<-identical(object$type,"class-multi")
 
  if(missing(x)){
   #There is no x; return the OOB predictions, nicely formatted
   if(scores){
-   data.frame(t(object$oobScores))->ans;
+   data.frame(t(object$oobScores))->ans
    object$classLabels->names(ans)
-   return(ans);
+   return(ans)
   }else{
    if(multi){
-    return(data.frame(object$oobPreds));
+    return(data.frame(object$oobPreds))
    }else{
-    return(object$oobPreds);
+    return(object$oobPreds)
    }
   }
  }
@@ -304,7 +297,7 @@ predict.rFerns<-function(object,x,scores=FALSE,...){
  if(!identical(names(x),pN)){
   #Restore x state from training based on x's names
   if(!all(pN%in%names(x))){
-   stop("Some training attributes missing in test.");
+   stop("Some training attributes missing in test.")
   }
   x[,pN]->x
  }
@@ -379,19 +372,19 @@ print.rFerns<-function(x,...){
     utils::tail(x$oobErr,1),
     x$parameters["classes"]))
    if(!is.null(x$oobPerClassError)){
-    cat(" Per-class error rates:\n");
+    cat(" Per-class error rates:\n")
     print(x$oobPerClassError)
    }
  }else{
   if(!is.null(x$oobErr))
    cat(sprintf(" OOB error %0.2f%%;",utils::tail(x$oobErr,1)*100))
   if(!is.null(x$oobConfusionMatrix)){
-   cat(" OOB confusion matrix:\n");
+   cat(" OOB confusion matrix:\n")
    print(x$oobConfusionMatrix)
   }
  }
  if(!is.null(x$oobScores) && any(is.na(x$oobScores)))
-  cat(" Note: forest too small to provide good OOB approx.\n");
+  cat(" Note: forest too small to provide good OOB approx.\n")
 
- return(invisible(x));
+ return(invisible(x))
 }

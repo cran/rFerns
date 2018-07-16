@@ -1,6 +1,6 @@
 /*   Code for making/predicting by single fern
 
-     Copyright 2011-2016 Miron B. Kursa
+     Copyright 2011-2018 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -48,7 +48,7 @@ void makeFern(DATASET_,FERN_,uint *restrict bag,score_t *restrict oobPrMatrix,ui
  //Calculate scores
  uint objInLeafPerClass[twoToD*numC]; //Counts of classes in a each leaf
  uint objInLeaf[twoToD]; //Counts of objects in each leaf
- uint objInBagPerClass[numC]; //Counts of classess in a bag
+ uint objInBagPerClass[numC]; //Counts of classes in a bag
  for(uint e=0;e<numC;e++)
   objInBagPerClass[e]=0;
  for(uint e=0;e<twoToD*numC;e++)
@@ -141,19 +141,18 @@ void predictFernAdd(PREDSET_,FERN_,double *restrict ans,uint *restrict idx,SIMP_
    ans[e*numC+ee]+=scores[idx[e]*numC+ee];
 }
 
-accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t *curPreds,uint numC,uint D,R_,uint64_t *rngStates,uint *idxP,uint *idxPP){
+accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t *curPreds,uint numC,uint D,R_,uint consSeed,uint *idxP,uint *idxPP){
  //Generate idxP. To this end, implicitly generate a permuted version of the attribute E and build split on it; then
  //replace this split within idx to make a copy of the fern as if it was grown on a permuted E.
  //We also make idxPP as idxP in a plain importance calculation.
  //...yet RINDEX is consistent, i.e. returns the same permutation for the same E; threshold is not
- rng_t zw;
- rng_t *rng2=&zw;
+ rng_t _rng2,*rng2=&_rng2;
  rng_t *rngO=rng;
 
  for(uint e=0;e<N;e++) idxPP[e]=(idxP[e]=idx[e]);
  for(uint e=0;e<D;e++) if(splitAtts[e]==E){
-  //Re-seed
-  ((uint64_t*)rng2)[0]=rngStates[E];
+  //Re-seed; different order than in makeModel for fern is intentional
+  SETSEEDEX(rng2,consSeed,E+1);
 
   //Back to business
   switch(X[E].numCat){
@@ -203,7 +202,7 @@ accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t 
  uint twoToD=1<<(D);
  uint objInLeafPerClassP[twoToD*numC]; //Counts of classes in a each leaf
  uint objInLeafP[twoToD]; //Counts of objects in each leaf
- uint objInBagPerClassP[numC]; //Counts of classess in a bag
+ uint objInBagPerClassP[numC]; //Counts of classes in a bag
  for(uint e=0;e<numC;e++) objInBagPerClassP[e]=0;
  for(uint e=0;e<twoToD*numC;e++) objInLeafPerClassP[e]=0;
  for(uint e=0;e<twoToD;e++) objInLeafP[e]=0;

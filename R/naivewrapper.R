@@ -1,6 +1,6 @@
 #    Naive wrapper for shadow VIM
 #
-#    Copyright 2011-2016 Miron B. Kursa
+#    Copyright 2011-2018 Miron B. Kursa
 #
 #    This file is part of rFerns R package.
 #
@@ -19,57 +19,65 @@
 #' @param y A decision vector. Must a factor of the same length as \code{nrow(X)} for ordinary many-label classification, or a logical matrix with each column corresponding to a class for multi-label classification.
 #' @param iterations Number of iterations i.e., the number of sub-models built.
 #' @param depth The depth of the ferns; must be in 1--16 range. Note that time and memory requirements scale with \code{2^depth}.
+#' @param threads Number of parallel threads, copied to the underlying \code{rFerns} call.
 #' @param ferns Number of ferns to be build in each sub-model. This should be a small number, around 3-5 times \code{size}.
 #' @param size Number of attributes considered by each sub-model.
+#' @param lambda Lambda parameter driving the re-weighting step of the method.
+#' @param saveHistory Should weight history be stored.
 #' @return An object of class \code{naiveWrapper}, which is a list with the following components:
 #' \item{found}{Names of all selected attributes.}
 #' \item{weights}{Vector of weights indicating the confidence that certain feature is relevant.}
 #' \item{timeTaken}{Time of computation.}
+#' \item{weightHistory}{History of weights over all iterations, present if \code{saveHistory} was \code{TRUE}.}
 #' \item{params}{Copies of algorithm parameters, \code{iterations}, \code{depth}, \code{ferns} and \code{size}, as a named vector.}
-#' @author Miron B. Kursa
 #' @references Kursa MB (2017). \emph{Efficient all relevant feature selection with random ferns}. In: Kryszkiewicz M., Appice A., Slezak D., Rybinski H., Skowron A., Ras Z. (eds) Foundations of Intelligent Systems. ISMIS 2017. Lecture Notes in Computer Science, vol 10352. Springer, Cham.
 #' @examples
-#' set.seed(77);
+#' set.seed(77)
 #' #Fetch Iris data
 #' data(iris)
 #' #Extend with random noise
-#' noisyIris<-cbind(iris[,-5],apply(iris[,-5],2,sample));
+#' noisyIris<-cbind(iris[,-5],apply(iris[,-5],2,sample))
 #' names(noisyIris)[5:8]<-sprintf("Nonsense%d",1:4)
 #' #Execute selection
 #' naiveWrapper(noisyIris,iris$Species,iterations=50,ferns=20,size=8)
 #' @export
-naiveWrapper<-function(x,y,iterations=1000,depth=5,ferns=100,size=30){
+naiveWrapper<-function(x,y,iterations=1000,depth=5,ferns=100,size=30,lambda=5,threads=0,saveHistory=FALSE){
 
  if(size>ncol(x)){
-  size<-ncol(x);
-  warning(sprintf("size parameter limited to ncol(X)=%d",ncol(x)));
+  size<-ncol(x)
+  warning(sprintf("size parameter limited to ncol(X)=%d",ncol(x)))
  }
- if(any(duplicated(names(x)))) stop("Cannot accept duplicated column names in x.");
+ if(any(duplicated(names(x)))) stop("Cannot accept duplicated column names in x.")
 
- Sys.time()->b;
+ Sys.time()->b
 
- weight<-rep(1,ncol(x)); names(weight)<-names(x);
+ wh<-NULL
+ weight<-rep(1,ncol(x)); names(weight)<-names(x)
  for(iter in 1:iterations){
-  weight[weight<.1]<-.1;
-  use<-sample(names(x),size,prob=weight/sum(weight));
+  weight[weight<.1]<-.1
+  if(saveHistory) cbind(wh,weight)->wh
+  use<-sample(names(x),size,prob=weight/sum(weight))
   rFerns(x[,use,drop=FALSE],y,
    ferns=ferns,
    depth=depth,
-   imp="sha")$importance->ii;
-  found<-rownames(ii)[ii$MeanScoreLoss>max(ii$Shadow)];
-  weight[found]<-weight[found]+5;
-  weight[use[!(use%in%found)]]<-weight[use[!(use%in%found)]]-10;
+   threads=threads,
+   saveForest=FALSE,
+   imp="sha")$importance->ii
+  found<-rownames(ii)[ii$MeanScoreLoss>max(ii$Shadow)]
+  weight[found]<-weight[found]+lambda
+  weight[use[!(use%in%found)]]<-weight[use[!(use%in%found)]]-2*lambda
  }
- weight[weight<.1]<-.1;
+ weight[weight<.1]<-.1
 
- found<-names(weight)[weight>max(c(weight,33))/2];
+ found<-names(weight)[weight>max(c(weight,2+6*lambda))/2]
 
- Sys.time()->a;
+ Sys.time()->a
 
  ans<-list(
   found=found,
   weight=weight,
   timeTaken=a-b,
+  weightHistory=wh,
   parameters=c(
    iterations=iterations,
    depth=depth,
@@ -84,14 +92,14 @@ naiveWrapper<-function(x,y,iterations=1000,depth=5,ferns=100,size=30){
 #' @method print naiveWrapper
 #' @export
 print.naiveWrapper<-function(x,...){
- cat("Naive shadow importance feature selection\n");
+ cat("Naive shadow importance feature selection\n")
  if(length(x$found)==0){
-  cat(" No attributes selected.\n");
+  cat(" No attributes selected.\n")
  }else{
   cat(strwrap(sprintf(" %d attributes selected: %s.\n",
    length(x$found),
    paste(x$found,collapse=", ")
-  )));
+  )))
  }
- cat("\n");
+ cat("\n")
 }

@@ -45,6 +45,3 @@ print(paste("Test error",err,sep=" "))
 #Show first OOB scores
 head(predict(model,scores=TRUE))
 }
-\author{
-Miron B. Kursa
-}

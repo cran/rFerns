@@ -1,6 +1,6 @@
 #    Additional rFerns R code
 #
-#    Copyright 2011-2016 Miron B. Kursa
+#    Copyright 2011-2018 Miron B. Kursa
 #
 #    This file is part of rFerns R package.
 #
@@ -46,7 +46,6 @@
 #' Shadow importance is only merged when both models have shadow importance and the same \code{consistentSeed} value; otherwise shadow importance would be biased down.
 #'
 #' The order of objects in \code{x} and \code{y} is not important; the only exception is merging with \code{NULL}, in which case \code{x} must be an \code{rFerns} object for R to use proper merge method.
-#' @author Miron B. Kursa
 #' @examples
 #' set.seed(77)
 #' #Fetch Iris data
@@ -54,24 +53,24 @@
 #' #Build models
 #' rFerns(Species~.,data=iris)->modelA
 #' rFerns(Species~.,data=iris)->modelB
-#' modelAB<-merge(modelA,modelB);
-#' print(modelA);
-#' print(modelAB);
+#' modelAB<-merge(modelA,modelB)
+#' print(modelA)
+#' print(modelAB)
 #' @export
 merge.rFerns<-function(x,y,dropModel=FALSE,ignoreObjectConsistency=FALSE,trueY=NULL,...){
- stopifnot(inherits(x,'rFerns')); #Tautology thanks to object dispatch
- if(is.null(y)) return(x);
+ stopifnot(inherits(x,'rFerns')) #Tautology thanks to object dispatch
+ if(is.null(y)) return(x)
  stopifnot(inherits(y,'rFerns'))
- stopifnot(identical(x$isStruct,y$isStruct));
+ stopifnot(identical(x$isStruct,y$isStruct))
  if(!ignoreObjectConsistency){
-  stopifnot(identical(dim(x$oobScores),dim(y$oobScores)));
+  stopifnot(identical(dim(x$oobScores),dim(y$oobScores)))
  }else{
-  x$oobScores<-NULL;
-  y$oobScores<-NULL;
-  trueY<-NULL;
+  x$oobScores<-NULL
+  y$oobScores<-NULL
+  trueY<-NULL
  }
- stopifnot(identical(x$classLabels,y$classLabels));
- stopifnot(identical(x$type,y$type));
+ stopifnot(identical(x$classLabels,y$classLabels))
+ stopifnot(identical(x$type,y$type))
  stopifnot(identical(x$parameters[-3],y$parameters[-3]))
 
  #Initiate core structure
@@ -79,73 +78,73 @@ merge.rFerns<-function(x,y,dropModel=FALSE,ignoreObjectConsistency=FALSE,trueY=N
   isStruct=x$isStruct,
   type=x$type,
   classLabels=x$classLabels,
-  merged=TRUE);
+  merged=TRUE)
 
  #Merge model fields
  if(is.null(x$model)||is.null(y$model)||dropModel){
-  ans$model<-NULL;
+  ans$model<-NULL
  }else{
   ans$model<-list(
    splitAttIdxs=c(x$model$splitAttIdxs,y$model$splitAttIdxs),
    threReal=c(x$model$threReal,y$model$threReal),
    threInteger=c(x$model$threInteger,y$model$threInteger),
    scores=c(x$model$scores,y$model$scores)
-  );
+  )
  }
 
- #OOB scores is summed with #ferns-derieved weights, then OOB elements re-generated
+ #OOB scores is summed with #ferns-derived weights, then OOB elements re-generated
  #When nrow x!=nrow y, we assume it means different batches were used and oobScores make no sense anymore
  if(!is.null(x$oobScores)&&!is.null(y$oobScores)){
-  ans$oobScores<-x$oobScores+y$oobScores;
+  ans$oobScores<-x$oobScores+y$oobScores
   ans$oobPreds<-factor(x$classLabels)[apply(ans$oobScores,2,
    function(x){
-    which.max(x)->l;
-    if(length(l)!=1) return(NA);
-    return(l);
+    which.max(x)->l
+    if(length(l)!=1) return(NA)
+    return(l)
    }
-   )];
+   )]
   if(!is.null(trueY)){
     #TODO: Multilabel!
-   stopifnot(is.factor(trueY));
-   stopifnot(identical(levels(trueY),ans$classLabels));
+   stopifnot(is.factor(trueY))
+   stopifnot(identical(levels(trueY),ans$classLabels))
    #OOB error propagation is always squashed into final OOB error
-   ans$oobErr<-mean(trueY!=ans$oobPreds);
+   ans$oobErr<-mean(trueY!=ans$oobPreds)
    ans$oobConfusionMatrix<-table(Predicted=ans$oobPreds,True=trueY)
   }
  }
 
  #Importance
  if(!is.null(x$importance)&&!is.null(y$importance)){
-  ans$importance<-x$importance;
+  ans$importance<-x$importance
   if(!is.null(ans$importance$Tries)&&!is.null(y$importance$Tries)){
-   ans$importance$Tries<-x$importance$Tries+y$importance$Tries;
+   ans$importance$Tries<-x$importance$Tries+y$importance$Tries
   }else{
-   ans$importance$Tries<-NULL;
+   ans$importance$Tries<-NULL
   }
   if(!is.null(ans$importance$MeanScoreLoss)&&!is.null(y$importance$MeanScoreLoss)){
    ans$importance$MeanScoreLoss<-
     (with(x$importance,MeanScoreLoss*Tries)+
-     with(y$importance,MeanScoreLoss*Tries))/ans$importance$Tries;
+     with(y$importance,MeanScoreLoss*Tries))/ans$importance$Tries
   }else{
-   ans$importance$MeanScoreLoss<-NULL;
+   ans$importance$MeanScoreLoss<-NULL
   }
   if(identical(x$consistentSeed,y$consistentSeed)&&!is.null(x$consistentSeed)){
-   ans$consistentSeed<-x$consistentSeed;
+   ans$consistentSeed<-x$consistentSeed
    if(!is.null(ans$importance$Shadow)&&!is.null(y$importance$Shadow)){
     ans$importance$Shadow<-
      (with(x$importance,Shadow*Tries)+
-      with(y$importance,Shadow*Tries))/ans$importance$Tries;
+      with(y$importance,Shadow*Tries))/ans$importance$Tries
    }else{
-    ans$importance$Shadow<-NULL;
+    ans$importance$Shadow<-NULL
    }
   }else{
-   ans$consistentSeed<-NULL; #Redundant
-   ans$importance$Shadow<-NULL;
+   ans$consistentSeed<-NULL #Redundant
+   ans$importance$Shadow<-NULL
   }
   if(!is.null(ans$importance$Hits)&&!is.null(y$importance$Hits)&&identical(x$consistentSeed,y$consistentSeed)){
-   ans$importance$Hits<-x$importance$Hits+y$importance$Hits;
+   ans$importance$Hits<-x$importance$Hits+y$importance$Hits
   }else{
-   ans$importance$Hits<-NULL;
+   ans$importance$Hits<-NULL
   }
  }
 
@@ -153,11 +152,11 @@ merge.rFerns<-function(x,y,dropModel=FALSE,ignoreObjectConsistency=FALSE,trueY=N
  ans$parameters<-c(
   x$parameters["classes"],
   x$parameters["depth"],
-  x$parameters["ferns"]+y$parameters["ferns"]);
+  x$parameters["ferns"]+y$parameters["ferns"])
 
  #Time taken
- ans$timeTaken<-x$timeTaken+y$timeTaken;
+ ans$timeTaken<-x$timeTaken+y$timeTaken
 
- class(ans)<-"rFerns";
+ class(ans)<-"rFerns"
  ans
 }

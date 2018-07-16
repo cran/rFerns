@@ -1,6 +1,6 @@
 /*   Code handling fern ensembles -- creation, prediction, OOB, accuracy...
 
-     Copyright 2011-2016 Miron B. Kursa
+     Copyright 2011-2018 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -9,38 +9,10 @@
  You should have received a copy of the GNU General Public License along with rFerns. If not, see http://www.gnu.org/licenses/.
 */
 
-double calcOobError(score_t *oobPredsAcc,uint *oobPredsC,uint *Y,uint N,uint numC,uint multi){
- uint wrong=0;
- uint count=0;
- if(!multi){
-  //Report 1-acc
-  for(uint e=0;e<N;e++){
-   score_t max=-INFINITY; uint whichMax=UINT_MAX;
-   for(uint ee=0;ee<numC;ee++)
-    if(oobPredsAcc[ee+numC*e]>max){
-     max=oobPredsAcc[ee+numC*e];
-     whichMax=ee;
-    }
-   uint ignore=!(oobPredsC[e]);
-   wrong+=(!ignore)&&(Y[e]!=whichMax);
-   count+=!ignore;
-  }
- }else{
-  //Report mean Hanning distance
-  for(uint e=0;e<N;e++){
-   uint ignore=!(oobPredsC[e]);
-   for(uint ee=0;ee<numC;ee++){
-    wrong+=(!ignore)&&(Y[ee*N+e]!=(oobPredsAcc[ee+numC*e]>0));
-   }
-   count+=!ignore;
-  }
- }
- return ((double)wrong)/((double)count);
-}
-
 void killModel(model *x);
 
 model *makeModel(DATASET_,ferns *ferns,params *P,R_){
+ uint scalarExecution=(P->threads==1),nt=P->threads;
  uint numC=P->numClasses;
  uint D=P->D;
  assert(D<=MAX_D);
@@ -49,115 +21,103 @@ model *makeModel(DATASET_,ferns *ferns,params *P,R_){
 
  //=Allocations=//
  //Internal objects
- ALLOCN(curPreds,score_t,numC*N);
- ALLOCN(bag,uint,N);
- ALLOCN(idx,uint,N);
+ ALLOCN(_curPreds,score_t,numC*N*nt);
+ ALLOCN(_bag,uint,N*nt);
+ ALLOCN(_idx,uint,N*nt);
 
  //Output objects
  ALLOCN(ans,model,1);
- ans->oobErr=NULL;
- if(P->holdOobErr)
-  ALLOC(ans->oobErr,double,P->numFerns);
 
- //OOB preds stuff
- ALLOCZ(ans->oobPreds,score_t,numC*N);
- score_t *oobPredsAcc=ans->oobPreds;
- ALLOCZ(ans->oobOutOfBagC,uint,N);
- uint *oobPredsC=ans->oobOutOfBagC;
+ //OOB prediction stuff
+ ALLOCZ(ans->oobPreds,score_t,numC*N*nt);
+ score_t *_oobPredsAcc=ans->oobPreds;
+ ALLOCZ(ans->oobOutOfBagC,uint,N*nt);
+ uint *_oobPredsC=ans->oobOutOfBagC;
 
  //Stuff for importance
- // double *sumD=NULL;
- // double *sumDD=NULL;
- uint *buf_idxPermA=NULL;
- uint *buf_idxPermB=NULL;
- uint64_t *rngStates=NULL;
+ uint *_buf_idxPerm=NULL;
  //Actual importance result
  ans->imp=NULL;
  ans->shimp=NULL;
  ans->try=NULL;
  //Allocate if needed only
  if(P->calcImp){
-  // ALLOCZ(sumD,double,nX);
-  // ALLOCZ(sumDD,double,nX);
   ALLOCZ(ans->imp,double,nX);
   ALLOCZ(ans->shimp,double,nX);
   ALLOCZ(ans->try,double,nX);
-  ALLOC(buf_idxPermA,uint,N);
-  ALLOC(buf_idxPermB,uint,N);
-}
-
-if(P->calcImp==2){
- //Initiate consistent rng buffer
- uint64_t savedSeed=DUMPSEED;
- uint64_t startSeed=P->consSeed;
- LOADSEED(startSeed);
- ALLOC(rngStates,uint64_t,nX);
- for(uint e=0;e<nX;e++){
-  rngStates[e]=DUMPSEED;
-  for(uint ee=0;ee<N;ee++) RINTEGER;
+  if(P->calcImp==1){
+   ALLOC(_buf_idxPerm,uint,N*nt);
+  }else if(P->calcImp==2){
+   ALLOC(_buf_idxPerm,uint,N*nt*2);
+  }else error("Somehow invalid importance flag; several internal logic breach. Please report.");
  }
- LOADSEED(savedSeed);
-}
 
- /*
-  When holdForest is FALSE, each fern is written to the index 0 of the fern vectors (which are obviously allocated to hold only 1 fern).
-  To account for that, eM is introduced; eM*<fern index> is <fern index> when holdForest is TRUE and 0 when holdForest is FALSE.
- */
- uint eM=!(!(P->holdForest));
  ans->forest=ferns;
+ uint modelSeed=RINTEGER;
 
  //=Building model=//
+ #pragma omp parallel for num_threads(nt)
  for(uint e=0;e<(P->numFerns);e++){
-  CHECK_INTERRUPT; //Place to go though event loop, if such is present
-  makeBagMask(bag,N,_R);
-  makeFern(_DATASET,_thFERN(e*eM),bag,curPreds,idx,_SIMP,_R);
+  uint tn=omp_get_thread_num(); //Number of the thread we're in
+  uint *bag=_bag+(N*tn),*idx=_idx+(N*tn);
+  score_t *curPreds=_curPreds+(N*numC*tn);
+  score_t *oobPredsAcc=_oobPredsAcc+(N*numC*tn);
+  uint *oobPredsC=_oobPredsC+(N*tn);
+  int fernLoc=(P->holdForest)?e:tn;
+  if(scalarExecution){
+   CHECK_INTERRUPT; //Place to go though event loop, if such is present
+  }
 
-  //Accumulating OOB errors
+  rng_t _curFernRng,*curFernRng=&_curFernRng;
+  SETSEEDEX(curFernRng,e+1,modelSeed);
+  makeBagMask(bag,N,curFernRng);
+  makeFern(_DATASET,_thFERN(fernLoc),bag,curPreds,idx,_SIMP,curFernRng);
+
+  //Accumulating OOB errors, independently per thread
   for(uint ee=0;ee<N;ee++){
    oobPredsC[ee]+=!(bag[ee]);
    for(uint eee=0;eee<numC;eee++)
     oobPredsAcc[eee+numC*ee]+=((double)(!(bag[ee])))*curPreds[eee+numC*ee];
   }
 
-  //Reporting OOB error
-  if(P->holdOobErr){
-   ans->oobErr[e]=calcOobError(oobPredsAcc,oobPredsC,Y,N,numC,multi);
-   if((e+1)%(P->repOobErrEvery)==0)
-    PRINT("Done fern %u/%u; current OOB error %0.5f\n",(e+1),(P->numFerns),ans->oobErr[e]);
-  }else{
-   if((e+1)%(P->repOobErrEvery)==0){
-    double err=calcOobError(oobPredsAcc,oobPredsC,Y,N,numC,multi);
-    PRINT("Done fern %u/%u; current OOB error %0.5f\n",(e+1),(P->numFerns),err);
-   }
-  }
+  //Importance
   if(P->calcImp){
    /*
     For importance, we want to know which unique attributes were used to build it.
     Their number will be placed in numAC, and attC[0..(numAC-1)] will contain their indices.
    */
    uint attC[MAX_D];
-   attC[0]=(ferns->splitAtts)[e*D*eM];
+   attC[0]=(ferns->splitAtts)[fernLoc*D];
    uint numAC=1;
    for(uint ee=1;ee<D;ee++){
     for(uint eee=0;eee<numAC;eee++)
-     if((ferns->splitAtts)[e*D*eM+ee]==attC[eee]) goto isDuplicate;
-    attC[numAC]=(ferns->splitAtts)[e*D*eM+ee]; numAC++;
+     if((ferns->splitAtts)[fernLoc*D+ee]==attC[eee]) goto isDuplicate;
+    attC[numAC]=(ferns->splitAtts)[fernLoc*D+ee]; numAC++;
     isDuplicate:
     continue;
    }
 
    if(P->calcImp==1){
+    uint *buf_idxPermA=_buf_idxPerm+(tn*N);
     for(uint ee=0;ee<numAC;ee++){
-     accLoss loss=calcAccLoss(_DATASET,attC[ee],_thFERN(e*eM),bag,idx,curPreds,numC,D,_R,buf_idxPermA);
-     ans->imp[attC[ee]]+=loss.direct;
-     ans->try[attC[ee]]++;
+     accLoss loss=calcAccLoss(_DATASET,attC[ee],_thFERN(fernLoc),bag,idx,curPreds,numC,D,curFernRng,buf_idxPermA);
+     #pragma omp critical
+     {
+      ans->imp[attC[ee]]+=loss.direct;
+      ans->try[attC[ee]]++;
+     }
     }
    }else{
+    uint *buf_idxPermA=_buf_idxPerm+(tn*N*2);
+    uint *buf_idxPermB=_buf_idxPerm+(tn*N*2+N);
     for(uint ee=0;ee<numAC;ee++){
-     accLoss loss=calcAccLossConsistent(_DATASET,attC[ee],_thFERN(e*eM),bag,idx,curPreds,numC,D,_R,rngStates,buf_idxPermA,buf_idxPermB);
-     ans->imp[attC[ee]]+=loss.direct;
-     ans->shimp[attC[ee]]+=loss.shadow;
-     ans->try[attC[ee]]++;
+     accLoss loss=calcAccLossConsistent(_DATASET,attC[ee],_thFERN(fernLoc),bag,idx,curPreds,numC,D,curFernRng,P->consSeed,buf_idxPermA,buf_idxPermB);
+     #pragma omp critical
+     {
+      ans->imp[attC[ee]]+=loss.direct;
+      ans->shimp[attC[ee]]+=loss.shadow;
+      ans->try[attC[ee]]++;
+     }
     }
    }
   }
@@ -180,20 +140,27 @@ if(P->calcImp==2){
    }
   }
  }
+
+ //Collecting OOB in parallel case
+ if(nt!=1) for(int e=0;e<N;e++){
+  //Loop over threads; we accumulate to tn 0, so from 1
+  for(int tn=1;tn<nt;tn++){
+   //Rprintf("%d/%d %d/%d\n",e,N,tn,nt);
+   for(int ee=0;ee<numC;ee++)
+    _oobPredsAcc[e*numC+ee]+=_oobPredsAcc[tn*N*numC+e*numC+ee];
+   _oobPredsC[e]+=_oobPredsC[tn*N+e];
+  }
+ }
  //Releasing memory
- FREE(bag); FREE(curPreds); FREE(idx);
- FREE(buf_idxPermA);
- FREE(buf_idxPermB);
- IFFREE(rngStates);
+ FREE(_bag); FREE(_curPreds); FREE(_idx);
+ FREE(_buf_idxPerm);
  return(ans);
 
  #ifndef IN_R
   allocFailed:
   killModel(ans);
-  IFFREE(bag); IFFREE(curPreds); IFFREE(idx);
-  IFFREE(buf_idxPermA);
-  IFFREE(buf_idxPermB);
-  IFFREE(rngStates);
+  IFFREE(_bag); IFFREE(_curPreds); IFFREE(_idx);
+  IFFREE(_buf_idxPerm);
   return(NULL);
  #endif
 }
@@ -214,7 +181,7 @@ void predictWithModelSimple(PREDSET_,ferns *x,uint *ans,SIMPP_,double *sans,R_){
  }
  if(!multi){
   for(uint e=0;e<N;e++)
-   ans[e]=whichMaxTieAware(&(sans[e*numC]),numC,_R);
+   ans[e]=whichMaxTieAware(&(sans[e*numC]),numC,e);
  }else{
   for(uint e=0;e<numC;e++)
    for(uint ee=0;ee<N;ee++)

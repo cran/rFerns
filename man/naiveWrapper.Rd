@@ -4,7 +4,8 @@
 \alias{naiveWrapper}
 \title{Naive feature selection method utilising the rFerns shadow imporance}
 \usage{
-naiveWrapper(x, y, iterations = 1000, depth = 5, ferns = 100, size = 30)
+naiveWrapper(x, y, iterations = 1000, depth = 5, ferns = 100, size = 30,
+  lambda = 5, threads = 0, saveHistory = FALSE)
 }
 \arguments{
 \item{x}{Data frame containing attributes; must have unique names and contain only numeric, integer or (ordered) factor columns.
@@ -19,12 +20,19 @@ Factors must have less than 31 levels. No \code{NA} values are permitted.}
 \item{ferns}{Number of ferns to be build in each sub-model. This should be a small number, around 3-5 times \code{size}.}
 
 \item{size}{Number of attributes considered by each sub-model.}
+
+\item{lambda}{Lambda parameter driving the re-weighting step of the method.}
+
+\item{threads}{Number of parallel threads, copied to the underlying \code{rFerns} call.}
+
+\item{saveHistory}{Should weight history be stored.}
 }
 \value{
 An object of class \code{naiveWrapper}, which is a list with the following components:
 \item{found}{Names of all selected attributes.}
 \item{weights}{Vector of weights indicating the confidence that certain feature is relevant.}
 \item{timeTaken}{Time of computation.}
+\item{weightHistory}{History of weights over all iterations, present if \code{saveHistory} was \code{TRUE}.}
 \item{params}{Copies of algorithm parameters, \code{iterations}, \code{depth}, \code{ferns} and \code{size}, as a named vector.}
 }
 \description{
@@ -33,18 +41,15 @@ It employs a super-ensemble of \code{iterations} small rFerns forests, each buil
 Final selection is a group of attributes which hold a substantial weight at the end of the procedure.
 }
 \examples{
-set.seed(77);
+set.seed(77)
 #Fetch Iris data
 data(iris)
 #Extend with random noise
-noisyIris<-cbind(iris[,-5],apply(iris[,-5],2,sample));
+noisyIris<-cbind(iris[,-5],apply(iris[,-5],2,sample))
 names(noisyIris)[5:8]<-sprintf("Nonsense\%d",1:4)
 #Execute selection
 naiveWrapper(noisyIris,iris$Species,iterations=50,ferns=20,size=8)
 }
 \references{
 Kursa MB (2017). \emph{Efficient all relevant feature selection with random ferns}. In: Kryszkiewicz M., Appice A., Slezak D., Rybinski H., Skowron A., Ras Z. (eds) Foundations of Intelligent Systems. ISMIS 2017. Lecture Notes in Computer Science, vol 10352. Springer, Cham.
-}
-\author{
-Miron B. Kursa
 }

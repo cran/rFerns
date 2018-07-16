@@ -1,3 +1,10 @@
+Changes in 3.0:
+ - Parallel training with OpenMP.
+ - New organisation of the internal PRNG.
+ - Error propagation reporting removed (arguments reportErrorEvery and
+ saveErrorPropagation) since it brings too little value for the
+ complexity it requires. And can be emulated with merging anyway.
+
 Changes in 2.0.3:
  - Registration of native routines.
  - Documentation updates.
@@ -7,18 +14,17 @@ Changes in 2.0.2:
  importance.
 
 Changes in 2.0.1:
- - Fixed bug in merge.rFerns code, causing merged importance
- scores to be wrong, especially after merging very small ensembles.
- - Fixed memory protection bug triggering rare segmentation faults
- in the R's GC, often long after the rFerns model was completed.
+ - Fixed bug in merge.rFerns code, causing merged importance scores to
+ be wrong, especially after merging very small ensembles.
+ - Fixed memory protection bug triggering rare segmentation faults in
+ the R's GC, often long after the rFerns model was completed.
 
 Changes in 2.0.0:
  - Shadow importance.
  - Roxygen documentation.
  - Model merging for parallel, batch and deeply traceable training.
- - Fixed a minor error in leaf score calculation (basically redundant
- to the model performance). Thanks to Mateusz Fedoryszak for spotting
- this.
+ - Fixed a minor error in leaf score calculation (basically redundant to
+ the model performance). Thanks to Mateusz Fedoryszak for spotting this.
  - Fixed OOB predictions returned by predict(), which are now always
  data.frame, even in the multi-label case.
 

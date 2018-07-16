@@ -62,10 +62,7 @@ data(iris)
 #Build models
 rFerns(Species~.,data=iris)->modelA
 rFerns(Species~.,data=iris)->modelB
-modelAB<-merge(modelA,modelB);
-print(modelA);
-print(modelAB);
-}
-\author{
-Miron B. Kursa
+modelAB<-merge(modelA,modelB)
+print(modelA)
+print(modelAB)
 }

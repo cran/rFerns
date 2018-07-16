@@ -14,8 +14,8 @@ rFerns(x, ...)
 \method{rFerns}{matrix}(x, y, ...)
 
 \method{rFerns}{default}(x, y, depth = 5, ferns = 1000,
-  importance = "none", reportErrorEvery = 0, saveErrorPropagation = FALSE,
-  saveForest = TRUE, consistentSeed = NULL, ...)
+  importance = "none", saveForest = TRUE, consistentSeed = NULL,
+  threads = 0, ...)
 }
 \arguments{
 \item{x}{Data frame containing attributes; must have unique names and contain only numeric, integer or (ordered) factor columns.
@@ -42,15 +42,12 @@ Shadow importance is useful as a reference to judge significance of a regular im
 For compatibility with pre-1.2 rFerns, \code{TRUE} will resolve to \code{"simple"} and \code{FALSE} to \code{"none"}.
 Abbreviation can be used instead of a full value.}
 
-\item{reportErrorEvery}{If set to a number larger than 0, current OOB error approximation will be printed every time a chunk of \code{reportErrorEvery} ferns is finished.}
-
-\item{saveErrorPropagation}{Should the OOB error approximation be calculated after each ferns was created and saved?
-Setting to \code{FALSE} may improve performance.}
-
 \item{saveForest}{Should the model be saved? It must be \code{TRUE} if you want to use the model for prediction; however, if you are interested in importance or OOB error only, setting it to \code{FALSE} significantly improves memory requirements, especially for large \code{depth} and \code{ferns}.}
 
 \item{consistentSeed}{PRNG seed used for shadow importance \emph{only}.
-Must be either a 2-element integer vector or \code{NULL}, which corresponds to seeding from the default PRNG.
+Must be either a 2-element integer vector or \code{NULL}, which corresponds to seeding from the default PRNG.}
+
+\item{threads}{Number or OpenMP threads to use. The default value of \code{0} means all available to OpenMP.
 It should be set to the same value in two merged models to make shadow importance meaningful.}
 }
 \value{
@@ -87,7 +84,7 @@ The levels of ordered factors in training and predicted data must be identical.
 Do not use formula interface for a data with large number of attributes; the overhead from handling the formula may be significant.
 }
 \examples{
-set.seed(77);
+set.seed(77)
 #Fetch Iris data
 data(iris)
 #Build model
@@ -100,7 +97,4 @@ print(model$imp)
 Ozuysal M, Calonder M, Lepetit V & Fua P. (2009). \emph{Fast Keypoint Recognition using Random Ferns}, IEEE Transactions on Pattern Analysis and Machine Intelligence, 32(3), 448-461.
 
 Kursa MB (2014). \emph{rFerns: An Implementation of the Random Ferns Method for General-Purpose Machine Learning}, Journal of Statistical Software, 61(10), 1-13.
-}
-\author{
-Miron B. Kursa
 }
