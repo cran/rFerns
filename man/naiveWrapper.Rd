@@ -4,8 +4,17 @@
 \alias{naiveWrapper}
 \title{Naive feature selection method utilising the rFerns shadow imporance}
 \usage{
-naiveWrapper(x, y, iterations = 1000, depth = 5, ferns = 100, size = 30,
-  lambda = 5, threads = 0, saveHistory = FALSE)
+naiveWrapper(
+  x,
+  y,
+  iterations = 1000,
+  depth = 5,
+  ferns = 100,
+  size = 30,
+  lambda = 5,
+  threads = 0,
+  saveHistory = FALSE
+)
 }
 \arguments{
 \item{x}{Data frame containing attributes; must have unique names and contain only numeric, integer or (ordered) factor columns.

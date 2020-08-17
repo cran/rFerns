@@ -1,6 +1,6 @@
 /*   Shared C code
 
-     Copyright 2011-2018 Miron B. Kursa
+     Copyright 2011-2020 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -27,7 +27,6 @@ typedef double score_t;
 
 #define MAX_D 16
 
-//Structs
 struct parameters{
  uint numClasses;
  uint D;
@@ -96,34 +95,53 @@ struct model{
 typedef struct model model;
 
 /*
- For speed, rFerns uses its own PRNG which is seeded from R's PRNG each time an rFerns model is built.
- It is somewhat worse then more computationally demanding PRNGs, though the way it is used makes the difference negligible.
+ For speed, rFerns uses its own PRNG, PCG, which is seeded from R's PRNG each time an rFerns model is built.
+ The generator is PCG32 by M.E. O'Neill https://www.pcg-random.org
 */
-//Internal PRNG -- based on G. Marsaglia's no-better-idea generator
+
 struct rng{
- uint32_t z;
- uint32_t w;
+ uint64_t state;
+ uint32_t stream;
 };
 typedef struct rng rng_t;
-#define RINTEGER_MAX (~((uint32_t)0))
 uint32_t __rintegerf(rng_t *rng){
- rng->z=36969*((rng->z)&65535)+((rng->z)>>16);
- rng->w=18000*((rng->w)&65535)+((rng->w)>>16);
- return(((rng->z)<<16)+((rng->w)&65535));
+ rng->state=rng->state*6364136223846793005+rng->stream;
+ uint32_t rot=(rng->state)>>59;
+ uint32_t s=(((rng->state)>>18)^(rng->state))>>27;
+ return((s<<((-rot)&31))|(s>>rot));
 }
+void __setrng(rng_t *rng,uint64_t seed,uint64_t stream){
+ rng->state=rng->stream=stream*2+1;
+ rng->state+=seed;
+ __rintegerf(rng);
+}
+
 #define RINTEGER __rintegerf(rng)
-//Gives a number from [0,1]
-#define RUNIF_CLOSED (((double)RINTEGER)*(1./4294967295.))
-//Gives a number from [0,1)
-#define RUNIF_OPEN   (((double)RINTEGER)*(1./4294967296.))
-//Gives a number from 0 to upTo-1 (each value equally probable provided upTo is safely smaller than 1<<32)
-#define RINDEX(upTo) ((uint32_t)(RUNIF_OPEN*((double)upTo)))
-//Setting seed; give it two uint32s you like
-#define SETSEED(a,b) rng->z=(a); rng->w=(b)
-#define SETSEEDEX(r,a,b) (r)->z=(a); (r)->w=(b);
-#define LOADSEED(x) ((uint64_t*)rng)[0]=(x)
-#define DUMPSEED ((uint64_t*)rng)[0]
-#define RMASK(numCat) 1+RINDEX((1<<(numCat))-2)
+#define SETRNG(r,sta,str) __setrng((r),(sta),(str))
+#define FETCH_SEED(r) ((r)->state)
+
+//Fast & unbiased algorithm by Daniel Lemire https://arxiv.org/pdf/1805.10941.pdf
+uint32_t __rindex(rng_t *rng,uint32_t upto){
+ uint32_t x=__rintegerf(rng);
+ uint64_t m=((uint64_t)x)*((uint64_t)upto);
+ uint32_t l=((uint32_t)m);
+ if(l<upto){
+  uint32_t t=(-upto)%upto;
+  while(l<t){
+   x=__rintegerf(rng);
+   m=((uint64_t)x)*((uint64_t)upto);
+   l=((uint32_t)m);
+  }
+ }
+ return(m>>32);
+}
+#define RINDEX(upTo) __rindex(rng,(upTo))
+uint32_t __rmask(rng_t *rng,uint32_t numCat){
+ if(numCat<3) return(1);
+ return(__rindex(rng,(1<<(numCat-1))-1)+1);
+}
+#define RMASK(numCat) __rmask(rng,(numCat))
+
 #define R_ rng_t *rng
 #define _R rng
 
@@ -134,29 +152,19 @@ uint32_t __rintegerf(rng_t *rng){
 //Sync PRNG with R; R will feel only two numbers were generated
 #define EMERGE_R_FROM_R \
  GetRNGstate(); \
- uint32_t a=(uint32_t)(((double)(~((uint32_t)0)))*unif_rand()); \
- uint32_t b=(uint32_t)(((double)(~((uint32_t)0)))*unif_rand()); \
+ uint64_t a=(uint32_t)(((double)(~((uint32_t)0)))*unif_rand()); \
+ uint64_t b=(uint32_t)(((double)(~((uint32_t)0)))*unif_rand()); \
  PutRNGstate(); \
+ a=(a<<32)+b; \
  rng_t rngdata; \
  rng_t *rng=&rngdata; \
- SETSEED(a,b)
+ SETRNG(rng,a,1)
 
 void makeBagMask(uint *bMask,uint N,R_){
  for(uint e=0;e<N;e++) bMask[e]=0;
  for(uint e=0;e<N;e++){
   bMask[RINDEX(N)]++;
  }
-}
-
-uint whichMax(double *where,uint N){
- double curMax=-INFINITY;
- uint ans=0;
- for(uint e=0;e<N;e++)
-  if(where[e]>curMax){
-   ans=e;
-   curMax=where[e];
-  }
- return ans;
 }
 
 //The algorithm used to use random values; now, it just
@@ -184,37 +192,13 @@ uint whichMaxTieAware(score_t *where,uint N,uint jmp){
 }
 
 //Memory stuff
-#ifdef IN_R
- #define ALLOCN(what,oftype,howmany) oftype* what=(oftype*)R_alloc(sizeof(oftype),(howmany))
- #define ALLOCNZ(what,oftype,howmany) oftype* what=(oftype*)R_alloc(sizeof(oftype),(howmany)); for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0
- #define ALLOC(what,oftype,howmany) what=(oftype*)R_alloc(sizeof(oftype),(howmany))
- #define ALLOCZ(what,oftype,howmany) {what=(oftype*)R_alloc(sizeof(oftype),(howmany));for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0;}
- #define IFFREE(x) //Nothing
- #define FREE(x) //Nothing
- #define CHECK_INTERRUPT R_CheckUserInterrupt()
-#else
- #define ALLOCN(what,oftype,howmany) oftype* what=(oftype*)malloc(sizeof(oftype)*(howmany)); if(!(what)) goto allocFailed
- #define ALLOCNZ(what,oftype,howmany) oftype* what=(oftype*)malloc(sizeof(oftype)*(howmany)); if(!(what)) goto allocFailed; for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0
- #define ALLOC(what,oftype,howmany) {what=(oftype*)malloc(sizeof(oftype)*(howmany)); if(!(what)) goto allocFailed;}
- #define ALLOCZ(what,oftype,howmany) {what=(oftype*)malloc(sizeof(oftype)*(howmany)); if(!(what)) goto allocFailed;for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0;}
- #define IFFREE(x) if((x)) free((x))
- #define FREE(x) free(x)
- #define CHECK_INTERRUPT //Nothing
+#ifndef FERNS_DEFINES
+#define ALLOCN(what,oftype,howmany) oftype* what=(oftype*)R_alloc(sizeof(oftype),(howmany))
+#define ALLOCNZ(what,oftype,howmany) oftype* what=(oftype*)R_alloc(sizeof(oftype),(howmany)); for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0
+#define ALLOC(what,oftype,howmany) what=(oftype*)R_alloc(sizeof(oftype),(howmany))
+#define ALLOCZ(what,oftype,howmany) {what=(oftype*)R_alloc(sizeof(oftype),(howmany));for(uint e_=0;e_<(howmany);e_++) what[e_]=(oftype)0;}
+#define IFFREE(x) //Nothing
+#define FREE(x) //Nothing
+#define CHECK_INTERRUPT R_CheckUserInterrupt()
 #endif
 
-ferns *allocateFernForest(params *P){
- size_t sizeA=sizeof(ferns);
- size_t sizeB=(P->numFerns)*sizeof(uint)*(P->D);
- size_t sizeC=(P->numFerns)*sizeof(thresh)*(P->D);
- size_t sizeD=(P->numFerns)*sizeof(score_t)*(P->numClasses)*(P->twoToD);
- ferns *ans=(ferns*)malloc(sizeA+sizeB+sizeC+sizeD);
- if(!ans) return NULL;
- ans->splitAtts=(int*)((char*)ans+sizeA);
- ans->thresholds=(thresh*)((char*)ans+sizeA+sizeB);
- ans->scores=(score_t*)((char*)ans+sizeA+sizeB+sizeC);
- return ans;
-}
-
-void killFernForest(ferns *x,params *P){
- IFFREE(x);
-}

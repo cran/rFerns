@@ -13,9 +13,17 @@ rFerns(x, ...)
 
 \method{rFerns}{matrix}(x, y, ...)
 
-\method{rFerns}{default}(x, y, depth = 5, ferns = 1000,
-  importance = "none", saveForest = TRUE, consistentSeed = NULL,
-  threads = 0, ...)
+\method{rFerns}{default}(
+  x,
+  y,
+  depth = 5,
+  ferns = 1000,
+  importance = "none",
+  saveForest = TRUE,
+  consistentSeed = NULL,
+  threads = 0,
+  ...
+)
 }
 \arguments{
 \item{x}{Data frame containing attributes; must have unique names and contain only numeric, integer or (ordered) factor columns.

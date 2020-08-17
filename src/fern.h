@@ -1,6 +1,6 @@
 /*   Code for making/predicting by single fern
 
-     Copyright 2011-2018 Miron B. Kursa
+     Copyright 2011-2020 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -22,7 +22,7 @@ void makeFern(DATASET_,FERN_,uint *restrict bag,score_t *restrict oobPrMatrix,ui
     double *restrict x=(double*)(X[E].x);
     double threshold=.5*(x[RINDEX(N)]+x[RINDEX(N)]);
     for(uint ee=0;ee<N;ee++)
-     idx[ee]+=(1<<e)*(x[ee]<threshold);
+     idx[ee]=SET_BIT(idx[ee],e,x[ee]<threshold);
     thresholds[e].value=threshold;
     break;
    }
@@ -31,7 +31,7 @@ void makeFern(DATASET_,FERN_,uint *restrict bag,score_t *restrict oobPrMatrix,ui
     sint *restrict x=(sint*)(X[E].x);
     sint threshold=x[RINDEX(N)];
     for(uint ee=0;ee<N;ee++)
-     idx[ee]+=(1<<e)*(x[ee]<threshold);
+     idx[ee]=SET_BIT(idx[ee],e,x[ee]<threshold);
     thresholds[e].intValue=threshold;
     break;
    }
@@ -40,7 +40,7 @@ void makeFern(DATASET_,FERN_,uint *restrict bag,score_t *restrict oobPrMatrix,ui
     uint *restrict x=(uint*)(X[E].x);
     mask mask=RMASK(X[E].numCat);
     for(uint ee=0;ee<N;ee++)
-     idx[ee]+=(1<<e)*((mask&(1<<(x[ee])))>0);
+     idx[ee]=SET_BIT(idx[ee],e,GET_BIT(mask,x[ee]-1));
     thresholds[e].selection=mask;
    }
   }
@@ -131,7 +131,8 @@ void predictFernAdd(PREDSET_,FERN_,double *restrict ans,uint *restrict idx,SIMP_
     uint *restrict x=(uint*)(X[E].x);
     mask mask=thresholds[e].selection;
     for(uint ee=0;ee<N;ee++)
-     idx[ee]+=(1<<e)*((mask&(1<<(x[ee])))>0);
+     idx[ee]=SET_BIT(idx[ee],e,GET_BIT(mask,x[ee]-1));
+     //idx[ee]+=(1<<e)*((mask&(1<<(x[ee]-1)))>0);
    }
   }
  }
@@ -141,7 +142,7 @@ void predictFernAdd(PREDSET_,FERN_,double *restrict ans,uint *restrict idx,SIMP_
    ans[e*numC+ee]+=scores[idx[e]*numC+ee];
 }
 
-accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t *curPreds,uint numC,uint D,R_,uint consSeed,uint *idxP,uint *idxPP){
+accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t *curPreds,uint numC,uint D,R_,uint64_t consSeed,uint *idxP,uint *idxPP){
  //Generate idxP. To this end, implicitly generate a permuted version of the attribute E and build split on it; then
  //replace this split within idx to make a copy of the fern as if it was grown on a permuted E.
  //We also make idxPP as idxP in a plain importance calculation.
@@ -152,7 +153,7 @@ accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t 
  for(uint e=0;e<N;e++) idxPP[e]=(idxP[e]=idx[e]);
  for(uint e=0;e<D;e++) if(splitAtts[e]==E){
   //Re-seed; different order than in makeModel for fern is intentional
-  SETSEEDEX(rng2,consSeed,E+1);
+  SETRNG(rng2,consSeed,E+21);
 
   //Back to business
   switch(X[E].numCat){
@@ -188,9 +189,9 @@ accLoss calcAccLossConsistent(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t 
     mask mask=thresholds[e].selection;
     for(uint ee=0;ee<N;ee++){
      rng=rng2;
-     idxP[ee]=SET_BIT(idxP[ee],e,GET_BIT(mask,x[RINDEX(N)]));
+     idxP[ee]=SET_BIT(idxP[ee],e,GET_BIT(mask,x[RINDEX(N)]-1));
      rng=rngO;
-     idxPP[ee]=SET_BIT(idxPP[ee],e,GET_BIT(mask,x[RINDEX(N)]));
+     idxPP[ee]=SET_BIT(idxPP[ee],e,GET_BIT(mask,x[RINDEX(N)]-1));
     }
     rng=rngO;
    }
@@ -272,7 +273,7 @@ accLoss calcAccLoss(DATASET_,uint E,FERN_,uint *bag,uint *idx,score_t *curPreds,
     uint *x=(uint*)(X[E].x);
     mask mask=thresholds[e].selection;
     for(uint ee=0;ee<N;ee++)
-     idxPerm[ee]=SET_BIT(idxPerm[ee],e,GET_BIT(mask,x[RINDEX(N)]));
+     idxPerm[ee]=SET_BIT(idxPerm[ee],e,GET_BIT(mask,x[RINDEX(N)]-1));
    }
   }
  }

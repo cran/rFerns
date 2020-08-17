@@ -1,3 +1,12 @@
+Changes in 4.0:
+ - Internal PRNG switched to PCG32, with D. Lemire method for used for 
+ unbiased sampling. Hence, same random seed does not reproduce the 
+ same results as pre-4.0 versions. One can also expect slight speed
+ regression.
+ - Migrated to GitLab.
+ - Fixed error in NA checking. Thanks to Patrick Schratz for spotting
+ this.
+
 Changes in 3.0:
  - Parallel training with OpenMP.
  - New organisation of the internal PRNG.

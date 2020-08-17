@@ -112,7 +112,7 @@ rFerns.default<-function(x,y,depth=5,ferns=1000,importance="none",saveForest=TRU
  stopifnot(length(ferns)==1 && ferns>0)
  stopifnot(!any(is.na(y)))
  if(!is.data.frame(x)) stop("x must be a data frame.")
- if(is.na(names(x)) || any(duplicated(names(x)))) stop("Attribute names must be unique.")
+ if(any(is.na(names(x))) || any(duplicated(names(x)))) stop("Attribute names must be unique.")
  if(is.factor(y) && is.null(dim(y))){
   multi<-FALSE
   if(length(y)!=nrow(x)) stop("Attributes' and decision's sizes must match.")

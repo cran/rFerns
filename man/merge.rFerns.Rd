@@ -4,8 +4,14 @@
 \alias{merge.rFerns}
 \title{Merge two random ferns models}
 \usage{
-\method{merge}{rFerns}(x, y, dropModel = FALSE,
-  ignoreObjectConsistency = FALSE, trueY = NULL, ...)
+\method{merge}{rFerns}(
+  x,
+  y,
+  dropModel = FALSE,
+  ignoreObjectConsistency = FALSE,
+  trueY = NULL,
+  ...
+)
 }
 \arguments{
 \item{x}{Object of a class \code{rFerns}; a first model to be merged.}

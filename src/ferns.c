@@ -1,6 +1,6 @@
 /*   R front-end to C code
 
-     Copyright 2011-2018 Miron B. Kursa
+     Copyright 2011-2020 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -87,7 +87,10 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
  Q.multilabel=multi;
  Q.threads=nt;
  if(Q.calcImp==2){
-  Q.consSeed=((uint32_t*)INTEGER(sConsSeed))[0];
+  Q.consSeed=(uint64_t)((uint32_t*)INTEGER(sConsSeed))[0];
+  //Distribute ones
+  Q.consSeed++;
+  for(int e=0;e<10;e++) Q.consSeed=Q.consSeed*6364136223846793005+17;
  }else{
   Q.consSeed=0;
  }

@@ -1,6 +1,6 @@
 /*   Code handling fern ensembles -- creation, prediction, OOB, accuracy...
 
-     Copyright 2011-2018 Miron B. Kursa
+     Copyright 2011-2020 Miron B. Kursa
 
      This file is part of rFerns R package.
 
@@ -53,7 +53,7 @@ model *makeModel(DATASET_,ferns *ferns,params *P,R_){
  }
 
  ans->forest=ferns;
- uint modelSeed=RINTEGER;
+ uint64_t modelSeed=FETCH_SEED(rng);
 
  //=Building model=//
  #pragma omp parallel for num_threads(nt)
@@ -69,7 +69,7 @@ model *makeModel(DATASET_,ferns *ferns,params *P,R_){
   }
 
   rng_t _curFernRng,*curFernRng=&_curFernRng;
-  SETSEEDEX(curFernRng,e+1,modelSeed);
+  SETRNG(curFernRng,modelSeed,e+21);
   makeBagMask(bag,N,curFernRng);
   makeFern(_DATASET,_thFERN(fernLoc),bag,curPreds,idx,_SIMP,curFernRng);
 
@@ -206,7 +206,6 @@ void killModel(model *x){
  if(x){
   IFFREE(x->oobPreds);
   IFFREE(x->oobOutOfBagC);
-  IFFREE(x->oobErr);
   IFFREE(x->imp);
   IFFREE(x->shimp);
   IFFREE(x->try);
