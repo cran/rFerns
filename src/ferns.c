@@ -9,16 +9,7 @@
  You should have received a copy of the GNU General Public License along with rFerns. If not, see http://www.gnu.org/licenses/.
 */
 
-#include <R.h>
-#include <Rdefines.h>
-#include <Rinternals.h>
-#include <R_ext/Utils.h>
-#include <R_ext/Rdynload.h>
-#include <R_ext/Visibility.h>
-
-#define PRINT Rprintf
 #define IN_R 7
-
 #include "tools.h"
 #include "fern.h"
 #include "forest.h"
@@ -90,7 +81,7 @@ SEXP random_ferns(SEXP sAttributes,SEXP sDecision,SEXP sD,SEXP sNumFerns,SEXP sC
   Q.consSeed=(uint64_t)((uint32_t*)INTEGER(sConsSeed))[0];
   //Distribute ones
   Q.consSeed++;
-  for(int e=0;e<10;e++) Q.consSeed=Q.consSeed*6364136223846793005+17;
+  for(int e=0;e<10;e++) Q.consSeed=((uint64_t)Q.consSeed)*((uint64_t)6364136223846793005)+((uint64_t)17);
  }else{
   Q.consSeed=0;
  }

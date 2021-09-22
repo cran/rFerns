@@ -1,3 +1,7 @@
+Changes in 5.0:
+ - Fixed clang-13 issue with OpenMP.
+ - Changed HTTP URLs to use HTTPS.
+
 Changes in 4.0:
  - Internal PRNG switched to PCG32, with D. Lemire method for used for 
  unbiased sampling. Hence, same random seed does not reproduce the 
